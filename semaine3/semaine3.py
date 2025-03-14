@@ -48,6 +48,7 @@ pdAvis = pd.DataFrame(avis)
 # Spam removable 
 pdAvis['review_length'] = pdAvis['comment'].str.len()
 pdAvis=pdAvis[pdAvis["review_length"] != 58097.0]
+
 #Duplicates removable
 pdAvis.drop_duplicates(subset=['author','title_review','note','title','comment'], inplace=True)
 pdJeux.drop_duplicates(subset=['title',	'href','avis'], inplace=True)
@@ -84,8 +85,24 @@ cleaned_matrix = minipingpong(sparse_ratings_matrix, allusers, allgames, 14, 18)
 
 # Soustraction de la moyenne de chaque utilisateur de ces ratings
 normalized_matrix = subtract_mean(cleaned_matrix)
-print(normalized_matrix)
+#print(normalized_matrix)
 
 
 ###################################################################################################
+
+#Train/Test split
+
+from fonctions import custom_train_test_split
+train_matrix, test_matrix, train_mask, test_mask = custom_train_test_split(
+    normalized_matrix, 
+    test_size=0.2, 
+    max_user_loss=0.5, 
+    max_game_loss=0.5,
+)
+
 #KNN
+
+
+
+
+

@@ -13,7 +13,7 @@ from surprise import Dataset
 from surprise import Reader
 from surprise import accuracy
 from surprise.model_selection import train_test_split as surprise_train_test_split
-from surprise import KNNBasic, KNNWithMeans
+from surprise import KNNBasic, KNNWithMeans, NMF
 from sklearn.neighbors import KNeighborsRegressor
 
 
@@ -146,12 +146,23 @@ y_predSVD = [pred.est for pred in predictionsSVD]
 r2_surprise = r2_score(y_true, y_pred)
 r2_SVD = r2_score(y_true, y_predSVD)
 
+###NMF
+
+nmf = NMF()
+nmf.fit(trainset)
+predNMF = nmf.test(testset)
+rmse_NMF = accuracy.rmse(predNMF)
+mae_NMF = accuracy.mae(predNMF)
+y_predNMF = [pred.est for pred in predNMF]
+r2_nmf =  r2_score(y_true, y_predNMF)
+
+
 
 results = pd.concat([results, pd.DataFrame({
-    'Model': ['BaselineOnly (Surprise)', 'SVD (Surprise)'], 
-    'RMSE': [rmse_surprise, rmse_SVD],                     
-    'MAE': [mae_surprise, mae_SVD],                         
-    'R2 score': [r2_surprise, r2_SVD]                    
+    'Model': ['BaselineOnly (Surprise)', 'SVD (Surprise)', 'NMF (Suprise)'], 
+    'RMSE': [rmse_surprise, rmse_SVD, rmse_NMF],                     
+    'MAE': [mae_surprise, mae_SVD, mae_NMF],                         
+    'R2 score': [r2_surprise, r2_SVD, r2_nmf]                    
 })], ignore_index=True)
 
 ########################################################################################################################
@@ -188,6 +199,7 @@ knn_results = pd.DataFrame({
 
 # Combine with previous results
 results = pd.concat([results, knn_results], ignore_index=True)
+
 
 
 ###################################################################################################

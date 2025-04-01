@@ -352,7 +352,7 @@ print(f"\nBest Overall Model: {best_overall['Model']} (Average Rank: {best_overa
 #Testing with different parameters with the worst performer NMF and 2 of the best 3 perfomers KNNwithmean and Baselinemodel
 
 # Function to pretty print grid search results
-def print_grid_search_results(results, n_top=3):
+def print_grid_search_results(results, n_top=5):
     print(f"Top {n_top} parameter combinations:")
     for i, params in enumerate(results[:n_top]):
         print(f"{i+1}. {params['params']} - RMSE: {params['mean_test_rmse']:.4f}")
@@ -361,15 +361,32 @@ def print_grid_search_results(results, n_top=3):
 best_configs = {}
 all_best_models = []
 
-# BaselineOnly param to test
+# models param to test
 param_grid_baseline = {
     'bsl_options': {
         'method': ['als', 'sgd'],
-        'reg': [0.02, 0.05, 0.1],
-        'learning_rate': [0.005, 0.01] # Only for sgd
+        'reg': [0.001, 0.01, 0.02, 0.05, 0.1, 0.2],
+        'learning_rate': [0.001, 0.005, 0.01, 0.02, 0.05] # Only for sgd
     }
 }
 
+
+
+param_grid_knn = {
+    'k': [5, 10, 20, 30, 40, 50, 60],
+    'min_k': [1, 2, 3, 5],
+    'sim_options': {
+        'name': ['pearson', 'cosine', 'msd']
+
+    }
+}
+
+param_grid_nmf = {
+    'n_factors': [10, 15, 20, 30, 50, 75],
+    'n_epochs': [25, 50, 75, 100],
+    'reg_pu': [0.01, 0.02, 0.06, 0.1],
+    'reg_qi': [0.01, 0.02, 0.06, 0.1]
+}
 
 gs_baseline = GridSearchCV(BaselineOnly, param_grid_baseline, measures=['rmse', 'mae'], cv=3)
 gs_baseline.fit(data)
@@ -390,15 +407,6 @@ print_grid_search_results(results_baseline)
 
 best_configs['BaselineOnly'] = best_baseline_params
 
-#same with knn
-param_grid_knn = {
-    'k': [5,10,20,30, 40, 50],
-    'min_k': [1, 3],
-    'sim_options': {
-        'name': ['pearson', 'cosine'],
-        'user_based': [True, False]
-    }
-}
 
 
 gs_knn = GridSearchCV(KNNWithMeans, param_grid_knn, measures=['rmse', 'mae'], cv=3)
@@ -420,13 +428,6 @@ print_grid_search_results(results_knn)
 
 best_configs['KNNWithMeans'] = best_knn_params
 
-#Nmf too
-param_grid_nmf = {
-    'n_factors': [15, 30, 50],
-    'n_epochs': [50, 75],
-    'reg_pu': [0.02, 0.06],
-    'reg_qi': [0.02, 0.06]
-}
 
 gs_nmf = GridSearchCV(NMF, param_grid_nmf, measures=['rmse', 'mae'], cv=3)
 gs_nmf.fit(data)
@@ -510,3 +511,32 @@ print(ranked_final[['Model', 'RMSE Rank', 'MAE Rank', 'MSE Rank', 'R2 Rank', 'Av
 
 best_final = ranked_final.iloc[0]
 print(f"\nBest Overall Model: {best_final['Model']} (Average Rank: {best_final['Avg Rank']:.2f})")
+
+############################################################################################################V
+# With knn we found that it has taken the highest k neighbors, so we will try to find a the k neighbors to be able to use later 
+
+
+
+param_grid_knn = {
+    'k': [65, 70, 80, 90, 100, 110, 120] # best k neighbors found after 90 le RMSE converges so that is the number of neighbors we will use later 
+    
+}
+    
+gs_knn = GridSearchCV(KNNWithMeans, param_grid_knn, measures=['rmse', 'mae'], cv=3)
+gs_knn.fit(data)
+
+best_knn_params = gs_knn.best_params['rmse']
+best_knn_score = gs_knn.best_score['rmse']
+print(f"\nKNNWithMeans Best Parameters: {best_knn_params}")
+print(f"RMSE: {best_knn_score:.4f}")
+
+results_knn = []
+for params, mean_rmse, mean_mae in zip(
+        gs_knn.cv_results['params'],
+        gs_knn.cv_results['mean_test_rmse'],
+        gs_knn.cv_results['mean_test_mae']):
+    results_knn.append({'params': params, 'mean_test_rmse': mean_rmse, 'mean_test_mae': mean_mae})
+results_knn.sort(key=lambda x: x['mean_test_rmse'])
+print_grid_search_results(results_knn)
+
+best_configs['KNNWithMeans'] = best_knn_params

@@ -518,7 +518,7 @@ print(f"\nBest Overall Model: {best_final['Model']} (Average Rank: {best_final['
 
 
 param_grid_knn = {
-    'k': [65, 70, 80, 90, 100, 110, 120] # best k neighbors found after 90 le RMSE converges so that is the number of neighbors we will use later 
+    'k': [5, 10, 20, 30, 40, 50, 60, 65, 70, 80,85, 90, 100, 110, 120] # best k neighbors found 90
     
 }
     
@@ -540,3 +540,49 @@ results_knn.sort(key=lambda x: x['mean_test_rmse'])
 print_grid_search_results(results_knn)
 
 best_configs['KNNWithMeans'] = best_knn_params
+
+
+# Extract k values and corresponding RMSE values
+k_values = []
+rmse_values = []
+mae_values = []
+
+
+sorted_results = sorted(results_knn, key=lambda x: x['params']['k'])
+
+for result in sorted_results:
+    k_values.append(result['params']['k'])
+    rmse_values.append(result['mean_test_rmse'])
+    mae_values.append(result['mean_test_mae'])
+
+mse_values = [rmse**2 for rmse in rmse_values]
+
+plt.figure(figsize=(12, 7))
+
+plt.plot(k_values, mse_values, 'o-', color='red', linewidth=2, markersize=8, label='MSE')
+
+
+best_k = best_knn_params['k']
+best_idx = k_values.index(best_k)
+best_mse = mse_values[best_idx]
+
+
+plt.plot(best_k, best_mse, 'o', markersize=12, markerfacecolor='none', 
+         markeredgewidth=2, markeredgecolor='darkred')
+
+
+plt.annotate(f'Best k={best_k}\nMSE={best_mse:.4f}',
+             xy=(best_k, best_mse),
+             xytext=(best_k+10, best_mse+0.02),
+             arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=.2", color='black'))
+
+plt.title('Effect of Number of Neighbors (k) on Model Error', fontsize=15)
+plt.xlabel('Number of Neighbors (k)', fontsize=12)
+plt.ylabel('Mean Squared Error (MSE)', fontsize=12, color='red')
+plt.grid(True, linestyle='--', alpha=0.7)
+
+handles1, labels1 = plt.gca().get_legend_handles_labels()
+plt.legend(handles1 , labels1 , loc='upper right')
+
+plt.tight_layout()
+plt.show()

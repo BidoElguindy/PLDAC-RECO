@@ -15,6 +15,8 @@ from surprise import accuracy
 from surprise.model_selection import train_test_split as surprise_train_test_split
 from surprise import KNNBasic, KNNWithMeans, NMF
 from sklearn.neighbors import KNeighborsRegressor
+from surprise.model_selection import GridSearchCV
+import time
 
 
 ###################################################################################################
@@ -275,13 +277,13 @@ results = pd.concat([results, sklearn_results], ignore_index=True)
 
 ##############################################################################################################
 
-# Results compairison
+# Model comparison with the base parameters
+
 print("All Model Comparison:")
 print(results)
 
 
 results['MSE'] = results['RMSE'] ** 2
-
 
 plt.figure(figsize=(14, 8))
 barWidth = 0.25
@@ -343,3 +345,168 @@ print(f"Best MSE: {best_mse['Model']} ({best_mse['MSE']:.4f})")
 print(f"Best R²: {best_r2['Model']} ({best_r2['R2 score']:.4f})")
 print(f"\nBest Overall Model: {best_overall['Model']} (Average Rank: {best_overall['Avg Rank']:.2f})")
 
+
+
+#####################################################################################################################
+
+#Testing with different parameters with the worst performer NMF and 2 of the best 3 perfomers KNNwithmean and Baselinemodel
+
+# Function to pretty print grid search results
+def print_grid_search_results(results, n_top=3):
+    print(f"Top {n_top} parameter combinations:")
+    for i, params in enumerate(results[:n_top]):
+        print(f"{i+1}. {params['params']} - RMSE: {params['mean_test_rmse']:.4f}")
+
+
+best_configs = {}
+all_best_models = []
+
+# BaselineOnly param to test
+param_grid_baseline = {
+    'bsl_options': {
+        'method': ['als', 'sgd'],
+        'reg': [0.02, 0.05, 0.1],
+        'learning_rate': [0.005, 0.01] # Only for sgd
+    }
+}
+
+
+gs_baseline = GridSearchCV(BaselineOnly, param_grid_baseline, measures=['rmse', 'mae'], cv=3)
+gs_baseline.fit(data)
+
+best_baseline_params = gs_baseline.best_params['rmse']
+best_baseline_score = gs_baseline.best_score['rmse']
+print(f"\nBaselineOnly Best Parameters: {best_baseline_params}")
+print(f"RMSE: {best_baseline_score:.4f}")
+
+results_baseline = []
+for params, mean_rmse, mean_mae in zip(
+        gs_baseline.cv_results['params'],
+        gs_baseline.cv_results['mean_test_rmse'],
+        gs_baseline.cv_results['mean_test_mae']):
+    results_baseline.append({'params': params, 'mean_test_rmse': mean_rmse, 'mean_test_mae': mean_mae})
+results_baseline.sort(key=lambda x: x['mean_test_rmse'])
+print_grid_search_results(results_baseline)
+
+best_configs['BaselineOnly'] = best_baseline_params
+
+#same with knn
+param_grid_knn = {
+    'k': [5,10,20,30, 40, 50],
+    'min_k': [1, 3],
+    'sim_options': {
+        'name': ['pearson', 'cosine'],
+        'user_based': [True, False]
+    }
+}
+
+
+gs_knn = GridSearchCV(KNNWithMeans, param_grid_knn, measures=['rmse', 'mae'], cv=3)
+gs_knn.fit(data)
+
+best_knn_params = gs_knn.best_params['rmse']
+best_knn_score = gs_knn.best_score['rmse']
+print(f"\nKNNWithMeans Best Parameters: {best_knn_params}")
+print(f"RMSE: {best_knn_score:.4f}")
+
+results_knn = []
+for params, mean_rmse, mean_mae in zip(
+        gs_knn.cv_results['params'],
+        gs_knn.cv_results['mean_test_rmse'],
+        gs_knn.cv_results['mean_test_mae']):
+    results_knn.append({'params': params, 'mean_test_rmse': mean_rmse, 'mean_test_mae': mean_mae})
+results_knn.sort(key=lambda x: x['mean_test_rmse'])
+print_grid_search_results(results_knn)
+
+best_configs['KNNWithMeans'] = best_knn_params
+
+#Nmf too
+param_grid_nmf = {
+    'n_factors': [15, 30, 50],
+    'n_epochs': [50, 75],
+    'reg_pu': [0.02, 0.06],
+    'reg_qi': [0.02, 0.06]
+}
+
+gs_nmf = GridSearchCV(NMF, param_grid_nmf, measures=['rmse', 'mae'], cv=3)
+gs_nmf.fit(data)
+
+best_nmf_params = gs_nmf.best_params['rmse']
+best_nmf_score = gs_nmf.best_score['rmse']
+print(f"\nNMF Best Parameters: {best_nmf_params}")
+print(f"RMSE: {best_nmf_score:.4f}")
+
+# Sort results by RMSE
+results_nmf = []
+for params, mean_rmse, mean_mae in zip(
+        gs_nmf.cv_results['params'],
+        gs_nmf.cv_results['mean_test_rmse'],
+        gs_nmf.cv_results['mean_test_mae']):
+    results_nmf.append({'params': params, 'mean_test_rmse': mean_rmse, 'mean_test_mae': mean_mae})
+results_nmf.sort(key=lambda x: x['mean_test_rmse'])
+print_grid_search_results(results_nmf)
+
+best_configs['NMF'] = best_nmf_params
+
+########################################################################################################################################################
+# Retrain models with optimal parameters and compare them with everything else I did
+
+
+best_baseline = BaselineOnly(**best_configs['BaselineOnly'])
+best_knn = KNNWithMeans(**best_configs['KNNWithMeans'])
+best_nmf = NMF(**best_configs['NMF'])
+
+best_models = [best_baseline, best_knn, best_nmf]
+best_model_names = ['BaselineOnly (Optimized)',
+                    'KNNWithMeans (Optimized)', 'NMF (Optimized)']
+
+optimized_results = []
+
+for name, model in zip(best_model_names, best_models):
+    model.fit(trainset)
+    
+    predictions = model.test(testset)
+    
+
+    rmse = accuracy.rmse(predictions)
+    mae = accuracy.mae(predictions)
+    y_true = np.array([pred.r_ui for pred in predictions])
+    y_pred = np.array([pred.est for pred in predictions])
+    r2 = r2_score(y_true, y_pred)
+    mse = mean_squared_error(y_true, y_pred)
+    
+    optimized_results.append({
+        'Model': name,
+        'RMSE': rmse,
+        'MAE': mae,
+        'MSE': mse,
+        'R2 score': r2
+    })
+
+optimized_df = pd.DataFrame(optimized_results)
+
+
+comparison_results = pd.concat([results, optimized_df], ignore_index=True)
+
+print("\nComparison of all models (original vs. optimized):")
+print(comparison_results[['Model', 'RMSE', 'MAE', 'MSE', 'R2 score']])
+
+
+rmse_rank = comparison_results['RMSE'].rank()
+mae_rank = comparison_results['MAE'].rank()
+mse_rank = comparison_results['MSE'].rank()
+r2_rank = comparison_results['R2 score'].rank(ascending=False)  # Reversed for R2
+
+comparison_results['RMSE Rank'] = rmse_rank
+comparison_results['MAE Rank'] = mae_rank
+comparison_results['MSE Rank'] = mse_rank
+comparison_results['R2 Rank'] = r2_rank
+comparison_results['Avg Rank'] = (rmse_rank + mae_rank + mse_rank + r2_rank) / 4
+
+ranked_final = comparison_results.sort_values('Avg Rank')
+print("\nFinal Model Rankings (including optimized models):")
+print(ranked_final[['Model', 'RMSE Rank', 'MAE Rank', 'MSE Rank', 'R2 Rank', 'Avg Rank']])
+
+
+best_final = ranked_final.iloc[0]
+print(f"\nBest Overall Model: {best_final['Model']} (Average Rank: {best_final['Avg Rank']:.2f})")
